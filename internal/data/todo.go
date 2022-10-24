@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"time"
 	"errors"
+	"fmt"
 	"context"
 
 	"Quiz3.zioncastillo.net/internal/validator"
@@ -37,14 +38,16 @@ func (m TodoModel) Insert(todo *Todo) error {
 		VALUES ($1, $2)
 		RETURNING id, created_at
 	`
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-
-	defer cancel()
 
 	args := []interface{}{
 		todo.Item,
 		todo.Description,
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+
+	defer cancel()
+
 	return m.DB.QueryRowContext(ctx, query, args...).Scan(&todo.ID, &todo.CreatedAt)
 }
 
@@ -64,10 +67,10 @@ func (m TodoModel) Get(id int64) (*Todo, error) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 
-		defer cancel
+		defer cancel()
 
 		// Execute the query using QueryRow()
-		err := m.DB.QueryRowContext(query, id).Scan(
+		err := m.DB.QueryRowContext(ctx, query, id).Scan(
 			&todo.ID,
 			&todo.CreatedAt,
 			&todo.Item,
@@ -98,16 +101,18 @@ func (m TodoModel) Update(todo *Todo) error {
 		WHERE id = $3
 		RETURNING id
 	`
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	
-	defer cancel()
 
 	args := []interface{}{
 		todo.Item,
 		todo.Description,
 		todo.ID,
 	}
-	return m.DB.QueryRowContext(query, args...).Scan(&todo.ID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	
+	defer cancel()
+
+	return m.DB.QueryRowContext(ctx, query, args...).Scan(&todo.ID)
 }
 
 // Delete() removes a specific Todo
@@ -126,7 +131,7 @@ func (m TodoModel) Delete(id int64) error {
 	defer cancel()
 
 	// Execute the query
-	result, err := m.DB.ExecContext(query, id)
+	result, err := m.DB.ExecContext(ctx, query, id)
 	if err != nil {
 		return err
 	}
@@ -141,4 +146,53 @@ func (m TodoModel) Delete(id int64) error {
 		return ErrRecordNotFound
 	}
 	return nil
+}
+func (m TodoModel) GetAll(item string, description string, filters Filters) ([]*Todo, Metadata, error) {
+	// Construct the query
+	query := fmt.Sprintf(`
+		SELECT COUNT(*) OVER(), id, created_at, item, description
+		FROM todolist
+		WHERE (to_tsvector('simple', item) @@ plainto_tsquery('simple',$1) OR $1 = '')
+		AND (to_tsvector('simple', description) @@ plainto_tsquery('simple', $2) OR $2 = '')
+		ORDER BY %s %s, id ASC
+		LIMIT $3 OFFSET $4`, filters.sortColumn(), filters.sortOrder())
+
+	// Create a 3-second-timout context
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	// Execute the query
+	args := []interface{}{item, description, filters.limit(), filters.offset()}
+	rows, err := m.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, Metadata{}, err
+	}
+	// Close the resultset
+	defer rows.Close()
+	totalRecords := 0
+	// Initialize an empty slice to hold the School data
+	lists := []*Todo{}
+	// Iterate over the rows in the resultset
+	for rows.Next() {
+		var todo Todo
+		// Scan the values from the row into school
+		err := rows.Scan(
+			&totalRecords,
+			&todo.ID,
+			&todo.CreatedAt,
+			&todo.Item,
+			&todo.Description,
+		)
+		if err != nil {
+			return nil, Metadata{}, err
+		}
+		// Add the School to our slice
+		lists = append(lists, &todo)
+	}
+	// Check for errors after looping through the resultset
+	if err = rows.Err(); err != nil {
+		return nil, Metadata{}, err
+	}
+	metadata := calculateMetadata(totalRecords, filters.Page, filters.PageSize)
+	// Return the slice of Schools
+	return lists, metadata, nil
 }

@@ -166,3 +166,43 @@ func (app *application) deleteTodoHandler(w http.ResponseWriter, r *http.Request
 		app.serverErrorResponse(w, r, err)
 	}
 }
+
+func (app *application) listTodoListHandler(w http.ResponseWriter, r *http.Request) {
+	// Create an input struct to hold our query parameters
+	var input struct {
+		Item  string
+		Descript string
+		data.Filters
+	}
+	// Initialize a validator
+	v := validator.New()
+	// Get the URL values map
+	qs := r.URL.Query()
+	// Use the helper methods to extract the values
+	input.Item = app.readString(qs, "item", "")
+	input.Descript = app.readString(qs, "description", "")
+	// Get the page information
+	input.Filters.Page = app.readInt(qs, "page", 1, v)
+	input.Filters.PageSize = app.readInt(qs, "page_size", 20, v)
+	// Get the sort information
+	input.Filters.Sort = app.readString(qs, "sort", "id")
+	// Specific the allowed sort values
+	input.Filters.SortList = []string{"id", "item", "description", "-id", "-item", "-description"}
+	// Check for validation errors
+	if data.ValidateFilters(v, input.Filters); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+	// Get a listing of all schools
+	lists, metadata,err := app.models.Todo.GetAll(input.Item, input.Descript, input.Filters)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	// Send a JSON response containg all the schools
+	err = app.writeJSON(w, http.StatusOK, envelope{"todo": lists, "metadata": metadata}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+}
