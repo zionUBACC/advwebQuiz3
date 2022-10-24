@@ -48,61 +48,57 @@ func (app *application) writeJSON(w http.ResponseWriter, status int, data envelo
 	return nil
 }
 func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
-	
-	//use http.maxbytesreader() to limit the size of the request body to 
-	//1 MB 2^20
+	// Use http.MaxBytesReader() to limit the size of the request body to
+	// 1 MB 2^20
 	maxBytes := 1_048_576
+	// Decode the request body into the target destination
 	r.Body = http.MaxBytesReader(w, r.Body, int64(maxBytes))
 	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()	
-	
-	//decode the request body into the destination
+	dec.DisallowUnknownFields()
 	err := dec.Decode(dst)
-	
-	//check for a bad request
+	// Check for a bad request
 	if err != nil {
 		var syntaxError *json.SyntaxError
 		var unmarshalTypeError *json.UnmarshalTypeError
 		var invalidUnmarshalError *json.InvalidUnmarshalError
-		
-		// switch to check the errror
+
+		// Switch to check for the errors
 		switch {
-			//check for syntax errors
+		// Check for syntax errors
 		case errors.As(err, &syntaxError):
-			return fmt.Errorf("body contains formed JSON(at character %d)", syntaxError.Offset)
+			return fmt.Errorf("body contains badly-formed JSON(at character %d)", syntaxError.Offset)
 		case errors.Is(err, io.ErrUnexpectedEOF):
 			return errors.New("body contains badly-formed JSON")
-		//check for wrong types passed by the client
+		// Check for wrong types passed by the client
 		case errors.As(err, &unmarshalTypeError):
 			if unmarshalTypeError.Field != "" {
 				return fmt.Errorf("body contains incorrect JSON type for field %q", unmarshalTypeError.Field)
 			}
 			return fmt.Errorf("body contains incorrect JSON type (at character %d)", unmarshalTypeError.Offset)
-		//empty body
+		// Empty body
 		case errors.Is(err, io.EOF):
 			return errors.New("body must not be empty")
-		//unmappable fields
+
+			// Unmappable fields
 		case strings.HasPrefix(err.Error(), "json: unknown field "):
 			fieldName := strings.TrimPrefix(err.Error(), "json: unknown field")
 			return fmt.Errorf("body contains unknown key %s", fieldName)
-		//too large file
+		// Too large
 		case err.Error() == "http: request body too large":
 			return fmt.Errorf("body must not be larger than %d bytes", maxBytes)
-		//pass a non-nil pointer error
+
+		// Pass  non-nil pointer error
 		case errors.As(err, &invalidUnmarshalError):
 			panic(err)
-		//default
+			// default
 		default:
 			return err
 		}
 	}
-		//call decode again
-	err = dec.Decode(&struct {}{})
+	// Call Decode() again
+	err = dec.Decode(&struct{}{})
 	if err != io.EOF {
-		return errors.New("body must only contain a single value")
+		return errors.New("body must only contain a single JSON value")
 	}
-		
-
-	
 	return nil
 }
