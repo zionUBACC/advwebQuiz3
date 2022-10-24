@@ -100,8 +100,8 @@ func (app *application) updateTodoHandler(w http.ResponseWriter, r *http.Request
 	}
 	// Create an input struct to hold data read in fro mteh client
 	var input struct {
-		Item       string   `json:"item"`
-		Descript   string   `json:"description"`
+		Item       *string   `json:"item"`
+		Descript   *string   `json:"description"`
 	}
 
 	// Initialize a new json.Decoder instance
@@ -110,11 +110,12 @@ func (app *application) updateTodoHandler(w http.ResponseWriter, r *http.Request
 		app.badRequestResponse(w, r, err)
 		return
 	}
-
-	// Copy / Update the fields / values in the school variable using the fields
-	// in the input struct
-	todo.Item = input.Item
-	todo.Description = input.Descript
+	if input.Item != nil {
+		todo.Item = *input.Item
+	}
+	if input.Descript != nil {
+		todo.Description = *input.Descript
+	}
 
 	// Perform validation on the updated School. If validation fails, then
 	// we send a 422 - Unprocessable Entity respose to the client

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"time"
 	"errors"
+	"context"
 
 	"Quiz3.zioncastillo.net/internal/validator"
 
@@ -36,11 +37,15 @@ func (m TodoModel) Insert(todo *Todo) error {
 		VALUES ($1, $2)
 		RETURNING id, created_at
 	`
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+
+	defer cancel()
+
 	args := []interface{}{
 		todo.Item,
 		todo.Description,
 	}
-	return m.DB.QueryRow(query, args...).Scan(&todo.ID, &todo.CreatedAt)
+	return m.DB.QueryRowContext(ctx, query, args...).Scan(&todo.ID, &todo.CreatedAt)
 }
 
 func (m TodoModel) Get(id int64) (*Todo, error) {
@@ -56,8 +61,13 @@ func (m TodoModel) Get(id int64) (*Todo, error) {
 		`
 		// Declare a School variable to hold the returned data
 		var todo Todo
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+
+		defer cancel
+
 		// Execute the query using QueryRow()
-		err := m.DB.QueryRow(query, id).Scan(
+		err := m.DB.QueryRowContext(query, id).Scan(
 			&todo.ID,
 			&todo.CreatedAt,
 			&todo.Item,
@@ -88,12 +98,16 @@ func (m TodoModel) Update(todo *Todo) error {
 		WHERE id = $3
 		RETURNING id
 	`
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	
+	defer cancel()
+
 	args := []interface{}{
 		todo.Item,
 		todo.Description,
 		todo.ID,
 	}
-	return m.DB.QueryRow(query, args...).Scan(&todo.ID)
+	return m.DB.QueryRowContext(query, args...).Scan(&todo.ID)
 }
 
 // Delete() removes a specific Todo
@@ -107,8 +121,12 @@ func (m TodoModel) Delete(id int64) error {
 		DELETE FROM todolist
 		WHERE id = $1
 	`
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+
+	defer cancel()
+
 	// Execute the query
-	result, err := m.DB.Exec(query, id)
+	result, err := m.DB.ExecContext(query, id)
 	if err != nil {
 		return err
 	}
